@@ -90,7 +90,7 @@ namespace velodyne_rawdata
   
   union fourbytes_bytes
   {
-    uint64_t uint;
+    uint32_t uint;
     uint8_t  bytes[4];
   };
   

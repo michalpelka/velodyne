@@ -27,6 +27,11 @@
 #include <velodyne_msgs/VelodyneClouds.h>
 
 
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/Twist.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <tf2/convert.h>
 
 namespace velodyne_pointcloud
 {
@@ -52,6 +57,8 @@ namespace velodyne_pointcloud
     ros::Publisher output1_;
     ros::Publisher output2_;
 
+    tf2_ros::Buffer tfBuffer;
+    tf2_ros::TransformListener tfListener;
 
     /// configuration parameters
     typedef struct {

@@ -154,14 +154,18 @@ namespace velodyne_rawdata
       unpack_vlp16(pkt, pc);
       return;
     }
-    uint64_t tt =  (pkt.data[1204]<<24) | (pkt.data[1203]<<16) | (pkt.data[1202]<< 8)
-            | (pkt.data[1201]);
-    
-    float f_tt = 1.0*tt / 1000000;
+
     
     const raw_packet_t *raw = (const raw_packet_t *) &pkt.data[0];
     
+
+
+    uint64_t tt =  (pkt.data[1204]<<24) | (pkt.data[1203]<<16) | (pkt.data[1202]<< 8)
+        | (pkt.data[1201]);
+
     for (int i = 0; i < BLOCKS_PER_PACKET; i++) {
+
+
 
       // upper bank lasers are numbered [0..31]
       // NOTE: this is a change from the old velodyne_common implementation
@@ -172,11 +176,7 @@ namespace velodyne_rawdata
       }
 
       for (int j = 0, k = 0; j < SCANS_PER_BLOCK; j++, k += RAW_SCAN_SIZE) {
-        float timeOffset = 2 * i * 55.296 + j*2.304;
-        if (j>SCANS_PER_BLOCK/2)
-        {
-            timeOffset = 2 * (i+1) * 55.296 + (j-SCANS_PER_BLOCK/2)*2.304;
-        }
+
         float x, y, z;
         float intensity;
         uint8_t laser_number;       ///< hardware laser number
@@ -305,7 +305,8 @@ namespace velodyne_rawdata
             point.y = y_coord;
             point.z = z_coord;
             point.intensity = intensity;
-            point.timestamp = pc.width;
+
+            point.timestamp = pkt.stamp.toSec();
             
             // append this point to the cloud
             pc.points.push_back(point);

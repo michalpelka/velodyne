@@ -29,7 +29,8 @@
   <build_depend>velodyne_msgs</build_depend>
   <build_depend>yaml-cpp</build_depend>
   <build_depend>dynamic_reconfigure</build_depend>
-
+  <build_depend>eigen_conversions</build_depend>
+  
   <!-- these build dependencies are only needed for unit testing -->
   <build_depend>roslaunch</build_depend>
   <build_depend>rostest</build_depend>
@@ -50,7 +51,7 @@
   <run_depend>velodyne_msgs</run_depend>
   <run_depend>yaml-cpp</run_depend>
   <run_depend>dynamic_reconfigure</run_depend>
-
+  <run_depend>eigen_conversions</run_depend>
   <export>
     <nodelet plugin="${prefix}/nodelets.xml"/>
   </export>

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(velodyne_driver)
 
-set(${PROJECT_NAME}_CATKIN_DEPS 
+set(${PROJECT_NAME}_CATKIN_DEPS
     diagnostic_updater
     dynamic_reconfigure
     nodelet
@@ -40,11 +40,14 @@ install(DIRECTORY launch/
 install(PROGRAMS src/vdump
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
+find_package(roslaunch REQUIRED)
+find_package(rostest REQUIRED)
+find_package(pluginlib REQUIRED)
+
+
 if (CATKIN_ENABLE_TESTING)
 
-  # these dependencies are only needed for unit testing
-  find_package(roslaunch REQUIRED)
-  find_package(rostest REQUIRED)
+
 
   # Download packet capture (PCAP) files containing test data.
   # Store them in devel-space, so rostest can easily find them.
@@ -63,7 +66,7 @@ if (CATKIN_ENABLE_TESTING)
     http://download.ros.org/data/velodyne/vlp16.pcap
     DESTINATION ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_SHARE_DESTINATION}/tests
     MD5 f45c2bb1d7ee358274e423ea3b66fd73)
-  
+
   # unit tests
   add_rostest(tests/pcap_node_hertz.test)
   add_rostest(tests/pcap_nodelet_hertz.test)
@@ -71,7 +74,7 @@ if (CATKIN_ENABLE_TESTING)
   add_rostest(tests/pcap_32e_nodelet_hertz.test)
   add_rostest(tests/pcap_vlp16_node_hertz.test)
   add_rostest(tests/pcap_vlp16_nodelet_hertz.test)
-  
+
   # parse check all the launch/*.launch files
   roslaunch_add_file_check(launch)
 

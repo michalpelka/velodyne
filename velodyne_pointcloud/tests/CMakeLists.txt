@@ -3,9 +3,6 @@
 #   Only configured when CATKIN_ENABLE_TESTING is true.
 
 # these dependencies are only needed for unit testing
-find_package(roslaunch REQUIRED)
-find_package(rostest REQUIRED)
-find_package(tf2_ros REQUIRED)
 
 # C++ gtests
 catkin_add_gtest(test_calibration test_calibration.cpp)

@@ -27,9 +27,12 @@ namespace velodyne_pointcloud
 
 
     // advertise output point cloud (before subscribing to input data)
-    output_ =
+    output1_ =
       node.advertise<sensor_msgs::PointCloud2>("velodyne_points", 10);
-      
+
+    output2_ =
+          node.advertise<sensor_msgs::PointCloud2>("velodyne_points_packets", 1024);
+
     srv_ = boost::make_shared <dynamic_reconfigure::Server<velodyne_pointcloud::
       CloudNodeConfig> > (private_nh);
     dynamic_reconfigure::Server<velodyne_pointcloud::CloudNodeConfig>::
@@ -55,27 +58,34 @@ namespace velodyne_pointcloud
   /** @brief Callback for raw scan messages. */
   void Convert::processScan(const velodyne_msgs::VelodyneScan::ConstPtr &scanMsg)
   {
-    if (output_.getNumSubscribers() == 0)         // no one listening?
-      return;                                     // avoid much work
 
-    // allocate a point cloud with same time and frame ID as raw data
-    velodyne_rawdata::VPointCloud::Ptr
-      outMsg(new velodyne_rawdata::VPointCloud());
-    // outMsg's header is a pcl::PCLHeader, convert it before stamp assignment
-    outMsg->header.stamp = pcl_conversions::toPCL(scanMsg->header).stamp;
-    outMsg->header.frame_id = scanMsg->header.frame_id;
-    outMsg->height = 1;
+	// process each packet provided by the driver
+	velodyne_rawdata::VPointCloud::Ptr outMsg(new velodyne_rawdata::VPointCloud());
 
-    // process each packet provided by the driver
-    for (size_t i = 0; i < scanMsg->packets.size(); ++i)
-      {
-        data_->unpack(scanMsg->packets[i], *outMsg);
-      }
+	// outMsg's header is a pcl::PCLHeader, convert it before stamp assignment
+	outMsg->header.stamp = pcl_conversions::toPCL(scanMsg->header).stamp;
+	outMsg->header.frame_id = scanMsg->header.frame_id;
+	outMsg->height = 1;
+
+
+	for (size_t i = 0; i < scanMsg->packets.size(); ++i)
+	{
+	// allocate a point cloud with same time and frame ID as raw data
+		velodyne_rawdata::VPointCloud::Ptr outMsg2(new velodyne_rawdata::VPointCloud());
+		data_->unpack(scanMsg->packets[i], *outMsg2);
+		outMsg2->header = outMsg->header;
+		output2_.publish(outMsg2);
+		outMsg->insert(outMsg->end(), outMsg2->begin(),outMsg2->end());
+
+	 }
+	 ROS_DEBUG_STREAM("Publishing " << outMsg->height * outMsg->width
+									 << " Velodyne points, time: " << outMsg->header.stamp);
+	 output1_.publish(outMsg);
+
+
+
 
     // publish the accumulated cloud message
-    ROS_DEBUG_STREAM("Publishing " << outMsg->height * outMsg->width
-                     << " Velodyne points, time: " << outMsg->header.stamp);
-    output_.publish(outMsg);
   }
 
 } // namespace velodyne_pointcloud

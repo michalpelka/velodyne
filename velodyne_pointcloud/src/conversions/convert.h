@@ -24,6 +24,9 @@
 
 #include <dynamic_reconfigure/server.h>
 #include <velodyne_pointcloud/CloudNodeConfig.h>
+#include <velodyne_msgs/VelodyneClouds.h>
+
+
 
 namespace velodyne_pointcloud
 {
@@ -46,7 +49,9 @@ namespace velodyne_pointcloud
     
     boost::shared_ptr<velodyne_rawdata::RawData> data_;
     ros::Subscriber velodyne_scan_;
-    ros::Publisher output_;
+    ros::Publisher output1_;
+    ros::Publisher output2_;
+
 
     /// configuration parameters
     typedef struct {

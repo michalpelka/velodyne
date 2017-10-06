@@ -87,7 +87,13 @@ namespace velodyne_rawdata
     uint16_t uint;
     uint8_t  bytes[2];
   };
-
+  
+  union fourbytes_bytes
+  {
+    uint32_t uint;
+    uint8_t  bytes[4];
+  };
+  
   static const int PACKET_SIZE = 1206;
   static const int BLOCKS_PER_PACKET = 12;
   static const int PACKET_STATUS_SIZE = 4;

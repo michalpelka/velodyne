@@ -18,6 +18,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <eigen_conversions/eigen_msg.h>
 #include <pcl/common/transforms.h>
+#include <tf/tf.h>
 namespace velodyne_pointcloud
 {
   /** @brief Constructor. */
@@ -26,6 +27,7 @@ namespace velodyne_pointcloud
 	tfBuffer(ros::Duration(25)),
 	tfListener(tfBuffer)
   {
+	  trjSavedCount = 0;
 	  tfBuffer.setUsingDedicatedThread(true);
     data_->setup(private_nh);
 
@@ -62,7 +64,148 @@ namespace velodyne_pointcloud
   /** @brief Callback for raw scan messages. */
   void Convert::processScan(const velodyne_msgs::VelodyneScan::ConstPtr &scanMsg)
   {
+#define V2
+#ifdef V1
+	if (output1_.getNumSubscribers() == 0)         // no one listening?
+	  return;                                     // avoid much work
 
+	// allocate a point cloud with same time and frame ID as raw data
+	velodyne_rawdata::VPointCloud::Ptr
+	  outMsg(new velodyne_rawdata::VPointCloud());
+	// outMsg's header is a pcl::PCLHeader, convert it before stamp assignment
+	outMsg->header.stamp = pcl_conversions::toPCL(scanMsg->header).stamp;
+	outMsg->header.frame_id = scanMsg->header.frame_id;
+	outMsg->height = 1;
+
+	// process each packet provided by the driver
+	for (size_t i = 0; i < scanMsg->packets.size(); ++i)
+	  {
+		data_->unpack(scanMsg->packets[i], *outMsg);
+	  }
+
+	// publish the accumulated cloud message
+	ROS_DEBUG_STREAM("Publishing " << outMsg->height * outMsg->width
+					 << " Velodyne points, time: " << outMsg->header.stamp);
+	output1_.publish(outMsg);
+#endif
+#ifdef V2
+	//if (output1_.getNumSubscribers() == 0)         // no one listening?
+	//  return;                                     // avoid much work
+
+	// allocate a point cloud with same time and frame ID as raw data
+	velodyne_rawdata::VPointCloud::Ptr outMsg(new velodyne_rawdata::VPointCloud());
+	velodyne_rawdata::VPointCloud::Ptr outMsgCorr(new velodyne_rawdata::VPointCloud());
+
+	// outMsg's header is a pcl::PCLHeader, convert it before stamp assignment
+	outMsg->header.stamp = pcl_conversions::toPCL(scanMsg->header).stamp;
+	outMsg->header.frame_id = scanMsg->header.frame_id;
+	outMsg->height = 1;
+	outMsgCorr->header  = outMsg->header;
+	outMsgCorr->header.frame_id = "longcross/odom";
+	ros::Time stampBegin = scanMsg->packets.front().stamp;
+	ros::Time stampEnd   = scanMsg->packets.back().stamp;
+	//get Twist
+
+
+	try {
+		double timeDiff = ros::Duration(stampEnd - stampBegin).toSec();
+
+
+		tfBuffer.canTransform(
+					"longcross/odom", scanMsg->header.frame_id,
+					stampEnd,ros::Duration(0.2));
+
+		geometry_msgs::TransformStamped transformStampedBegin = tfBuffer.lookupTransform(
+				"longcross/odom",
+				scanMsg->header.frame_id,
+				stampBegin);
+		geometry_msgs::TransformStamped transformStampedEnd = tfBuffer.lookupTransform(
+				"longcross/odom",
+				scanMsg->header.frame_id,
+				stampEnd);
+
+
+
+
+
+		double dx  = transformStampedEnd.transform.translation.x-transformStampedBegin.transform.translation.x;
+		double dy  = transformStampedEnd.transform.translation.y-transformStampedBegin.transform.translation.y;
+		double dz  = transformStampedEnd.transform.translation.z-transformStampedBegin.transform.translation.z;
+
+		tf::Quaternion quatBegin;
+		quatBegin.setW(transformStampedBegin.transform.rotation.w);
+		quatBegin.setX(transformStampedBegin.transform.rotation.x);
+		quatBegin.setY(transformStampedBegin.transform.rotation.y);
+		quatBegin.setZ(transformStampedBegin.transform.rotation.z);
+
+		tf::Quaternion quatEnd;
+		quatEnd.setW(transformStampedEnd.transform.rotation.w);
+		quatEnd.setX(transformStampedEnd.transform.rotation.x);
+		quatEnd.setY(transformStampedEnd.transform.rotation.y);
+		quatEnd.setZ(transformStampedEnd.transform.rotation.z);
+
+		//ROS_INFO_STREAM("dx : "<< dx << "\t" << dy << "\t"<< dz);
+
+
+		// process each packet provided by the driver
+		for (size_t i = 0; i < scanMsg->packets.size(); ++i)
+		{
+
+			double diffTimeToBegin =  ros::Duration(scanMsg->packets[i].stamp - stampBegin).toSec();
+
+			// that value should be zero for first package, and one for last package
+			double factor = diffTimeToBegin/timeDiff;
+
+			double timeCorrectedX = transformStampedBegin.transform.translation.x + factor * dx;
+			double timeCorrectedY = transformStampedBegin.transform.translation.y + factor * dy;
+			double timeCorrectedZ = transformStampedBegin.transform.translation.z + factor * dz;
+
+			tf::Quaternion timeCorrectedRot = quatBegin.slerp(quatEnd, factor);
+
+			// build eigen Affine for pcl
+
+			Eigen::Affine3f timeCorrectedOdomTransform = Eigen::Affine3f::Identity();
+			timeCorrectedOdomTransform.translate(Eigen::Vector3f(timeCorrectedX,timeCorrectedY,timeCorrectedZ));
+			timeCorrectedOdomTransform.rotate(Eigen::Quaternionf(timeCorrectedRot.w(),
+					timeCorrectedRot.x(),timeCorrectedRot.y(),timeCorrectedRot.z()));
+
+
+
+			//ROS_INFO_STREAM("i:" << i << "\t" << factor);
+
+			velodyne_rawdata::VPointCloud::Ptr outMsgPartial(new velodyne_rawdata::VPointCloud());
+			velodyne_rawdata::VPointCloud::Ptr outMsgPartialTf(new velodyne_rawdata::VPointCloud());
+
+			outMsgPartial->header.stamp = pcl_conversions::toPCL(scanMsg->header).stamp;
+			outMsgPartial->header.frame_id = scanMsg->header.frame_id;
+			outMsgPartial->height = 1;
+
+			data_->unpack(scanMsg->packets[i], *outMsgPartial);
+			for (size_t j= 0; j < outMsgPartial->size(); j++)
+			{
+				(*outMsgPartial)[j].chunkid = i;
+			}
+			outMsg->insert(outMsg->end(), outMsgPartial->begin(),outMsgPartial->end());
+			pcl::transformPointCloud (*outMsgPartial, *outMsgPartialTf, timeCorrectedOdomTransform);
+			outMsgCorr->insert(outMsgCorr->end(), outMsgPartialTf->begin(),outMsgPartialTf->end());
+		}
+
+		// publish the accumulated cloud message
+		ROS_DEBUG_STREAM("Publishing " << outMsg->height * outMsg->width
+						 << " Velodyne points, time: " << outMsg->header.stamp);
+		output2_.publish(outMsgCorr);
+		output1_.publish(outMsg);
+
+
+	} catch (tf2::TransformException &ex) {
+			ROS_WARN("%s", ex.what());
+	}
+
+
+
+
+#endif
+#ifdef V3
 
 	// process each packet provided by the driver
 	velodyne_rawdata::VPointCloud::Ptr outMsg(new velodyne_rawdata::VPointCloud());
@@ -77,13 +220,9 @@ namespace velodyne_pointcloud
 		tfBuffer.canTransform(
 				outMsg2->header.frame_id, scanMsg->header.frame_id,
 				scanMsg->header.stamp,ros::Duration(0.1));
-//		canTransform(const std::string& target_frame, const std::string& source_frame,
-//		                 const ros::Time& target_time, const ros::Duration timeout, std::string* errstr = NULL) const;
 
 	} catch (tf2::TransformException &ex) {
 		ROS_WARN("%s", ex.what());
-		//ros::Duration(1.0).sleep();
-
 	}
 
 
@@ -96,8 +235,11 @@ namespace velodyne_pointcloud
 		velodyne_rawdata::VPointCloud::Ptr patrialCloudTfed (new velodyne_rawdata::VPointCloud());
 
 		data_->unpack(scanMsg->packets[i], *patrialCloud);
+		for (velodyne_rawdata::VPointCloud::iterator it = patrialCloud->begin(); it != patrialCloud->end();it++)
+		{
+			it->chunkid = i;
+		}
 
-//		tf2::doTransform (cloud_in, cloud_out, transform);
 		outMsg->insert(outMsg->end(), patrialCloud->begin(),patrialCloud->end());
 
 		try {
@@ -114,6 +256,33 @@ namespace velodyne_pointcloud
 			pcl::transformPointCloud(*patrialCloud,*patrialCloudTfed, transformStampedAffineD.cast<float>());
 			outMsg2->insert(outMsg2->end(), patrialCloudTfed->begin(),patrialCloudTfed->end());
 
+			size_t size_pointcloud_before = trjData.size();
+			trjData = trjData + *patrialCloud;
+			size_t size_pointcloud_after = trjData.size();
+
+			Eigen::Vector3d translation =  transformStampedAffineD.translation();
+
+			Eigen::Vector3d eulerAngles =  transformStampedAffineD.rotation().eulerAngles(0,1,2);
+
+			//timestamp,indexBeginInclusive,indexEndExclusive,indexLaser,angleRotatingUnitRad,trajectoryX,trajectoryY,trajectoryZ,trajectoryXangleRad,trajectoryYangleRad,trajectoryZangleRad
+
+
+
+			trjMeta<<scanMsg->packets[i].stamp.toSec() <<","    //timestamp
+				   <<size_pointcloud_before<<","                //indexBeginInclusive
+				   <<size_pointcloud_after<<","                 //indexEndExclusive
+				   <<0<<","										//indexLaser
+				   <<0<<","										//angleRotatingUnitRad
+				   <<translation.x()<<","
+				   <<translation.y()<<","
+				   <<translation.z()<<","
+				   <<eulerAngles.x()<<","
+				   <<eulerAngles.y()<<","
+				   <<eulerAngles.z()<<"\n";
+
+
+
+
 		} catch (tf2::TransformException &ex) {
 			//ros::Duration(1.0).sleep();
 
@@ -125,12 +294,14 @@ namespace velodyne_pointcloud
 
 	 }
 
+
+
 	 ROS_DEBUG_STREAM("Publishing " << outMsg->height * outMsg->width
 									 << " Velodyne points, time: " << outMsg->header.stamp);
 	 output1_.publish(outMsg);
 	 output2_.publish(outMsg2);
 
-
+#endif
 
     // publish the accumulated cloud message
   }

@@ -60,6 +60,13 @@ namespace velodyne_pointcloud
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener;
 
+
+
+
+    size_t trjSavedCount;
+    std::stringstream trjMeta;
+    velodyne_rawdata::VPointCloud trjData;
+
     /// configuration parameters
     typedef struct {
       int npackets;                    ///< number of packets to combine

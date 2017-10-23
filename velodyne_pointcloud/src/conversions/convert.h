@@ -32,7 +32,7 @@
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf2/convert.h>
-
+#include <nav_msgs/Path.h>
 namespace velodyne_pointcloud
 {
   class Convert
@@ -56,7 +56,7 @@ namespace velodyne_pointcloud
     ros::Subscriber velodyne_scan_;
     ros::Publisher output1_;
     ros::Publisher output2_;
-
+    ros::Publisher output3_;
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener;
 
@@ -66,7 +66,7 @@ namespace velodyne_pointcloud
     size_t trjSavedCount;
     std::stringstream trjMeta;
     velodyne_rawdata::VPointCloud trjData;
-
+    std::string rootOdomFrame ;
     /// configuration parameters
     typedef struct {
       int npackets;                    ///< number of packets to combine

@@ -30,7 +30,9 @@ namespace velodyne_pointcloud
 	  trjSavedCount = 0;
 	  tfBuffer.setUsingDedicatedThread(true);
     data_->setup(private_nh);
-
+    rootOdomFrame = "longcross/odom";
+    node.getParam("rootOdomFrame", rootOdomFrame);
+    ROS_INFO("rootOdomFrame: %s", rootOdomFrame.c_str());
 
     // advertise output point cloud (before subscribing to input data)
     output1_ =
@@ -38,6 +40,10 @@ namespace velodyne_pointcloud
 
     output2_ =
           node.advertise<sensor_msgs::PointCloud2>("velodyne_points_tf", 10);
+
+    output3_ =
+    	  node.advertise<nav_msgs::Path>("velodyne_correction_path", 10);
+
 
     srv_ = boost::make_shared <dynamic_reconfigure::Server<velodyne_pointcloud::
       CloudNodeConfig> > (private_nh);
@@ -65,6 +71,7 @@ namespace velodyne_pointcloud
   void Convert::processScan(const velodyne_msgs::VelodyneScan::ConstPtr &scanMsg)
   {
 #define V2
+//#define SAVE_TRJ
 #ifdef V1
 	if (output1_.getNumSubscribers() == 0)         // no one listening?
 	  return;                                     // avoid much work
@@ -101,7 +108,7 @@ namespace velodyne_pointcloud
 	outMsg->header.frame_id = scanMsg->header.frame_id;
 	outMsg->height = 1;
 	outMsgCorr->header  = outMsg->header;
-	outMsgCorr->header.frame_id = "longcross/odom";
+	outMsgCorr->header.frame_id = rootOdomFrame;
 	ros::Time stampBegin = scanMsg->packets.front().stamp;
 	ros::Time stampEnd   = scanMsg->packets.back().stamp;
 	//get Twist
@@ -112,15 +119,15 @@ namespace velodyne_pointcloud
 
 
 		tfBuffer.canTransform(
-					"longcross/odom", scanMsg->header.frame_id,
+					rootOdomFrame, scanMsg->header.frame_id,
 					stampEnd,ros::Duration(0.2));
 
 		geometry_msgs::TransformStamped transformStampedBegin = tfBuffer.lookupTransform(
-				"longcross/odom",
+				rootOdomFrame,
 				scanMsg->header.frame_id,
 				stampBegin);
 		geometry_msgs::TransformStamped transformStampedEnd = tfBuffer.lookupTransform(
-				"longcross/odom",
+				rootOdomFrame,
 				scanMsg->header.frame_id,
 				stampEnd);
 
@@ -148,6 +155,8 @@ namespace velodyne_pointcloud
 
 
 		// process each packet provided by the driver
+		nav_msgs::Path correctionpath;
+		correctionpath.header.frame_id = rootOdomFrame;
 		for (size_t i = 0; i < scanMsg->packets.size(); ++i)
 		{
 
@@ -170,6 +179,21 @@ namespace velodyne_pointcloud
 					timeCorrectedRot.x(),timeCorrectedRot.y(),timeCorrectedRot.z()));
 
 
+			geometry_msgs::PoseStamped correctionPose;
+			correctionPose.header.frame_id = rootOdomFrame;
+			correctionPose.header.stamp    = scanMsg->packets[i].stamp;
+			correctionPose.pose.position.x = timeCorrectedX;
+			correctionPose.pose.position.y = timeCorrectedY;
+			correctionPose.pose.position.z = timeCorrectedZ;
+			correctionPose.pose.orientation.w = timeCorrectedRot.w();
+			correctionPose.pose.orientation.x = timeCorrectedRot.x();
+			correctionPose.pose.orientation.y = timeCorrectedRot.y();
+			correctionPose.pose.orientation.z = timeCorrectedRot.z();
+
+			correctionpath.poses.push_back(correctionPose);
+
+
+
 
 			//ROS_INFO_STREAM("i:" << i << "\t" << factor);
 
@@ -188,6 +212,26 @@ namespace velodyne_pointcloud
 			outMsg->insert(outMsg->end(), outMsgPartial->begin(),outMsgPartial->end());
 			pcl::transformPointCloud (*outMsgPartial, *outMsgPartialTf, timeCorrectedOdomTransform);
 			outMsgCorr->insert(outMsgCorr->end(), outMsgPartialTf->begin(),outMsgPartialTf->end());
+			output3_.publish(correctionpath);
+#ifdef SAVE_TRJ
+			Eigen::Vector3f translation =  timeCorrectedOdomTransform.translation();
+			Eigen::Vector3f eulerAngles =  timeCorrectedOdomTransform.rotation().eulerAngles(0,1,2);
+
+			size_t size_pointcloud_before = trjData.size();
+			trjData = trjData + *outMsgPartial;
+			size_t size_pointcloud_after = trjData.size();
+			trjMeta<<scanMsg->packets[i].stamp.toSec() <<","    //timestamp
+			   <<size_pointcloud_before<<","                //indexBeginInclusive
+			   <<size_pointcloud_after<<","                 //indexEndExclusive
+			   <<0<<","										//indexLaser
+			   <<0<<","										//angleRotatingUnitRad
+			   <<translation.x()<<","
+			   <<translation.y()<<","
+			   <<translation.z()<<","
+			   <<eulerAngles.x()<<","
+			   <<eulerAngles.y()<<","
+			   <<eulerAngles.z()<<"\n";
+#endif
 		}
 
 		// publish the accumulated cloud message
@@ -195,7 +239,22 @@ namespace velodyne_pointcloud
 						 << " Velodyne points, time: " << outMsg->header.stamp);
 		output2_.publish(outMsgCorr);
 		output1_.publish(outMsg);
+#ifdef SAVE_TRJ
+		char fn_trj [1024];
+		char fn_pcd [1024];
+		snprintf(fn_trj, 1024, "/tmp/scan_%03d.trj", trjSavedCount);
+		snprintf(fn_pcd, 1024, "/tmp/scan_%03d.pcd", trjSavedCount);
 
+		pcl::io::savePCDFileASCII (fn_pcd, trjData);
+		std::ofstream fos;
+		fos.open(fn_trj);
+		fos<<"timestamp,indexBeginInclusive,indexEndExclusive,indexLaser,angleRotatingUnitRad,trajectoryX,trajectoryY,trajectoryZ,trajectoryXangleRad,trajectoryYangleRad,trajectoryZangleRad\n";
+		fos<<trjMeta.str();
+		fos.close();
+		trjData.clear();
+		trjMeta.clear();
+		trjSavedCount++;
+#endif
 
 	} catch (tf2::TransformException &ex) {
 			ROS_WARN("%s", ex.what());

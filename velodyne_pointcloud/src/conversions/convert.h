@@ -57,6 +57,8 @@ namespace velodyne_pointcloud
     ros::Publisher output1_;
     ros::Publisher output2_;
     ros::Publisher output3_;
+    ros::Publisher outputTrj_;
+
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener;
 

@@ -1,0 +1,9 @@
+uint64 indexBeginInclusive
+uint64 indexEndExclusive
+uint32 indexLaser
+float64 trajectoryX
+float64 trajectoryY
+float64 trajectoryZ
+float64 trajectoryXangleRad
+float64 trajectoryYangleRad
+float64 trajectoryZangleRad

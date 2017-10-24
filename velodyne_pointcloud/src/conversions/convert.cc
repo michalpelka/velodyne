@@ -19,6 +19,7 @@
 #include <eigen_conversions/eigen_msg.h>
 #include <pcl/common/transforms.h>
 #include <tf/tf.h>
+#include <velodyne_msgs/PointCloudWithTrj.h>
 namespace velodyne_pointcloud
 {
   /** @brief Constructor. */
@@ -44,6 +45,8 @@ namespace velodyne_pointcloud
     output3_ =
     	  node.advertise<nav_msgs::Path>("velodyne_correction_path", 10);
 
+    outputTrj_ =
+    		node.advertise<velodyne_msgs::PointCloudWithTrj>("velodyne_trj", 10);
 
     srv_ = boost::make_shared <dynamic_reconfigure::Server<velodyne_pointcloud::
       CloudNodeConfig> > (private_nh);
@@ -113,6 +116,7 @@ namespace velodyne_pointcloud
 	ros::Time stampEnd   = scanMsg->packets.back().stamp;
 	//get Twist
 
+	velodyne_msgs::PointCloudWithTrj myPointcloudWithTrj;
 
 	try {
 		double timeDiff = ros::Duration(stampEnd - stampBegin).toSec();
@@ -130,9 +134,6 @@ namespace velodyne_pointcloud
 				rootOdomFrame,
 				scanMsg->header.frame_id,
 				stampEnd);
-
-
-
 
 
 		double dx  = transformStampedEnd.transform.translation.x-transformStampedBegin.transform.translation.x;
@@ -192,7 +193,18 @@ namespace velodyne_pointcloud
 
 			correctionpath.poses.push_back(correctionPose);
 
+			velodyne_msgs::Trj trj_;
 
+			Eigen::Vector3f translation =  timeCorrectedOdomTransform.translation();
+			Eigen::Vector3f eulerAngles =  timeCorrectedOdomTransform.rotation().eulerAngles(0,1,2);
+
+			trj_.trajectoryX = translation.x();
+			trj_.trajectoryY = translation.y();
+			trj_.trajectoryZ = translation.z();
+
+			trj_.trajectoryXangleRad = eulerAngles.x();
+			trj_.trajectoryYangleRad = eulerAngles.y();
+			trj_.trajectoryZangleRad = eulerAngles.z();
 
 
 			//ROS_INFO_STREAM("i:" << i << "\t" << factor);
@@ -209,10 +221,16 @@ namespace velodyne_pointcloud
 			{
 				(*outMsgPartial)[j].chunkid = i;
 			}
+			trj_.indexBeginInclusive = outMsg->size();
 			outMsg->insert(outMsg->end(), outMsgPartial->begin(),outMsgPartial->end());
+			trj_.indexEndExclusive   = outMsg->size();
+			myPointcloudWithTrj.trj.push_back(trj_);
+
 			pcl::transformPointCloud (*outMsgPartial, *outMsgPartialTf, timeCorrectedOdomTransform);
 			outMsgCorr->insert(outMsgCorr->end(), outMsgPartialTf->begin(),outMsgPartialTf->end());
 			output3_.publish(correctionpath);
+
+
 #ifdef SAVE_TRJ
 			Eigen::Vector3f translation =  timeCorrectedOdomTransform.translation();
 			Eigen::Vector3f eulerAngles =  timeCorrectedOdomTransform.rotation().eulerAngles(0,1,2);
@@ -239,6 +257,9 @@ namespace velodyne_pointcloud
 						 << " Velodyne points, time: " << outMsg->header.stamp);
 		output2_.publish(outMsgCorr);
 		output1_.publish(outMsg);
+		pcl::toROSMsg(*outMsg, myPointcloudWithTrj.packet );
+		outputTrj_.publish(myPointcloudWithTrj);
+
 #ifdef SAVE_TRJ
 		char fn_trj [1024];
 		char fn_pcd [1024];

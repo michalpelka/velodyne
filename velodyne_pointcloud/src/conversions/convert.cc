@@ -166,6 +166,7 @@ namespace velodyne_pointcloud
 			// that value should be zero for first package, and one for last package
 			double factor = diffTimeToBegin/timeDiff;
 
+			//factor = 0;
 			double timeCorrectedX = transformStampedBegin.transform.translation.x + factor * dx;
 			double timeCorrectedY = transformStampedBegin.transform.translation.y + factor * dy;
 			double timeCorrectedZ = transformStampedBegin.transform.translation.z + factor * dz;
@@ -175,10 +176,10 @@ namespace velodyne_pointcloud
 			// build eigen Affine for pcl
 
 			Eigen::Affine3f timeCorrectedOdomTransform = Eigen::Affine3f::Identity();
-			timeCorrectedOdomTransform.translate(Eigen::Vector3f(timeCorrectedX,timeCorrectedY,timeCorrectedZ));
 			timeCorrectedOdomTransform.rotate(Eigen::Quaternionf(timeCorrectedRot.w(),
 					timeCorrectedRot.x(),timeCorrectedRot.y(),timeCorrectedRot.z()));
 
+			timeCorrectedOdomTransform.translate(Eigen::Vector3f(timeCorrectedX,timeCorrectedY,timeCorrectedZ));
 
 			geometry_msgs::PoseStamped correctionPose;
 			correctionPose.header.frame_id = rootOdomFrame;
@@ -230,10 +231,10 @@ namespace velodyne_pointcloud
 			outMsgCorr->insert(outMsgCorr->end(), outMsgPartialTf->begin(),outMsgPartialTf->end());
 			output3_.publish(correctionpath);
 
-
+//#define SAVE_TRJ
 #ifdef SAVE_TRJ
-			Eigen::Vector3f translation =  timeCorrectedOdomTransform.translation();
-			Eigen::Vector3f eulerAngles =  timeCorrectedOdomTransform.rotation().eulerAngles(0,1,2);
+			//Eigen::Vector3f translation =  timeCorrectedOdomTransform.translation();
+			//Eigen::Vector3f eulerAngles =  timeCorrectedOdomTransform.rotation().eulerAngles(0,1,2);
 
 			size_t size_pointcloud_before = trjData.size();
 			trjData = trjData + *outMsgPartial;

@@ -8,6 +8,7 @@ add_message_files(
   FILES
   Trj.msg
   VelodynePacket.msg
+  VelodyneClouds.msg
   VelodyneScan.msg
   PointCloudWithTrj.msg
 
